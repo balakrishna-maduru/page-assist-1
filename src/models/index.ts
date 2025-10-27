@@ -104,6 +104,7 @@ export const pageAssistModel = async ({
       maxTokens: modelSettings?.numPredict || numPredict,
       temperature: modelSettings?.temperature || temperature,
       topP: modelSettings?.topP || topP,
+      topK: modelSettings?.topK || topK,
       reasoningEffort:
         modelSettings?.reasoningEffort || (reasoningEffort as any)
     }
@@ -122,6 +123,18 @@ export const pageAssistModel = async ({
             headers: providerInfo?.headers || []
           })
         }
+      }) as any
+    }
+
+    if (providerInfo.provider === "sso-gemini") {
+      const { CustomGeminiChat } = await import("./CustomGeminiChat")
+      return new CustomGeminiChat({
+        modelName: modelInfo.model_id,
+        temperature: modelConfig?.temperature,
+        topP: modelConfig?.topP,
+        topK: modelConfig?.topK,
+        maxOutputTokens: modelConfig?.maxTokens,
+        streaming: true
       }) as any
     }
 

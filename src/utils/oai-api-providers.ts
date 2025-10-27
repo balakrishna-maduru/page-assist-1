@@ -123,5 +123,10 @@ export const OAI_API_PROVIDERS = [
     label: "Chutes",
     value: "chutes",
     baseUrl: "https://llm.chutes.ai/v1"
+  },
+  {
+    label: "SSO Gemini",
+    value: "sso-gemini",
+    baseUrl: "https://stork.apps.ocp8.uat.abc.com"
   }
 ]

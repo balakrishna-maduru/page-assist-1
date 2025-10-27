@@ -3,7 +3,8 @@ import {
   OrbitIcon,
   CpuIcon,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ShieldIcon
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { useLocation, Link } from "react-router-dom"
@@ -70,6 +71,12 @@ export const SidePanelSettingsLayout = ({
                     href="/settings/openai"
                     name={t("openai:settings")}
                     icon={CpuIcon}
+                    current={location.pathname}
+                  />
+                  <LinkComponent
+                    href="/settings/sso-gemini"
+                    name="SSO Gemini"
+                    icon={ShieldIcon}
                     current={location.pathname}
                   />
                   <LinkComponent

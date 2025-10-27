@@ -7,6 +7,7 @@ const SidepanelChat = lazy(() => import("./sidepanel-chat"))
 const SidepanelSettings = lazy(() => import("./sidepanel-settings"))
 const SidepanelSettingsOpenAI = lazy(() => import("./sidepanel-settings-openai"))
 const SidepanelSettingsModel = lazy(() => import("./sidepanel-settings-model"))  
+const SidepanelSettingsSSOGemini = lazy(() => import("./sidepanel-settings-sso-gemini"))  
 
 const OptionIndex = lazy(() => import("./option-index"))
 const OptionModal = lazy(() => import("./option-settings-model"))
@@ -43,6 +44,7 @@ export const SidepanelRoutingFirefox = () => {
       <Route path="/settings" element={<SidepanelSettings />} />
       <Route path="/settings/openai" element={<SidepanelSettingsOpenAI />} /> 
       <Route path="/settings/model" element={<SidepanelSettingsModel />} /> 
+      <Route path="/settings/sso-gemini" element={<SidepanelSettingsSSOGemini />} />
     </Routes>
   )
 }

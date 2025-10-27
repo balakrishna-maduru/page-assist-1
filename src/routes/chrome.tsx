@@ -14,6 +14,7 @@ import OptionChrome from "./option-settings-chrome"
 import OptionOpenAI from "./option-settings-openai"
 import SidepanelSettingsOpenAI from "./sidepanel-settings-openai"
 import SidepanelSettingsModel from "./sidepanel-settings-model"
+import SidepanelSettingsSSOGemini from "./sidepanel-settings-sso-gemini"
 
 export const OptionRoutingChrome = () => {
   return (
@@ -40,6 +41,7 @@ export const SidepanelRoutingChrome = () => {
       <Route path="/settings" element={<SidepanelSettings />} />
       <Route path="/settings/openai" element={<SidepanelSettingsOpenAI />} />
       <Route path="/settings/model" element={<SidepanelSettingsModel />} />
+      <Route path="/settings/sso-gemini" element={<SidepanelSettingsSSOGemini />} />
     </Routes>
   )
 }
