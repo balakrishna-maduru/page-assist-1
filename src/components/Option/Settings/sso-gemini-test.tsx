@@ -1,6 +1,7 @@
 import React, { useState } from "react"
 import { Button, Card, Space, Typography, message, Alert } from "antd"
 import { testSSOGeminiIntegration, testSSOLogin } from "@/utils/test-sso-gemini"
+import { QUICK_DEV_CONFIG } from "@/services/dev-config"
 
 const { Title, Text, Paragraph } = Typography
 
@@ -64,19 +65,18 @@ export const SSOGeminiTestComponent = () => {
     <div className="space-y-6">
       <Card title="🧪 SSO + Gemini API Integration Test" size="small">
         <div className="space-y-4">
-          <Paragraph>
-            Use these test buttons to verify that the SSO authentication and Gemini API integration 
-            is working correctly. Make sure you have configured your SSO credentials and Gemini API 
-            settings first.
-          </Paragraph>
-
           <Alert
-            message="Important Note"
-            description="These tests use your actual SSO credentials. Make sure they are configured correctly in the SSO Gemini settings page."
-            type="warning"
+            message="Development Mode Active"
+            description={`Using mock server for testing. SSO endpoint: ${QUICK_DEV_CONFIG.ssoEndpoint}. Click 'Use Mock Server' button above to configure automatically.`}
+            type="info"
             showIcon
             style={{ marginBottom: 16 }}
           />
+
+          <Paragraph>
+            Use these test buttons to verify that the SSO authentication and Gemini API integration 
+            is working correctly. The system will use the mock server when enterprise endpoints are unavailable.
+          </Paragraph>
 
           <Space direction="vertical" size="middle" style={{ width: '100%' }}>
             <Button 
@@ -85,7 +85,7 @@ export const SSOGeminiTestComponent = () => {
               onClick={runSSOTest}
               size="large"
             >
-              🔐 Test SSO Login Only
+              🔐 Test SSO Login (Mock Server)
             </Button>
 
             <Button 

@@ -4,9 +4,15 @@ import { clearBadge, streamDownload, cancelDownload } from "@/utils/pull-ollama"
 import { Storage } from "@plasmohq/storage"
 import { getInitialConfig } from "@/services/action"
 import { getCustomCopilotPrompts, getCopilotPromptsEnabledState, type CustomCopilotPrompt } from "@/services/application"
+import { initializeDefaultSSO } from "@/services/default-sso-init"
 
 export default defineBackground({
   main() {
+    // Initialize default SSO configuration on extension startup
+    initializeDefaultSSO().catch(error => {
+      console.error("Failed to initialize default SSO:", error)
+    })
+
     const storage = new Storage({
       area: "local"
     })

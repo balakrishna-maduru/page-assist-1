@@ -68,12 +68,16 @@ export class GeminiAPIClient {
   private async makeAuthenticatedRequest(url: string, requestBody: GeminiRequest): Promise<Response> {
     let token: string
     
+    console.log('🔧 Making authenticated request to:', url)
+    
     try {
       token = await getValidAccessToken()
     } catch (error) {
       console.error('Failed to get access token:', error)
       throw new Error('Authentication failed. Please check your SSO credentials.')
     }
+
+    console.log('🔧 Using token:', token ? token.substring(0, 20) + '...' : 'none')
 
     const response = await fetch(url, {
       method: 'POST',
@@ -83,6 +87,9 @@ export class GeminiAPIClient {
       },
       body: JSON.stringify(requestBody)
     })
+
+    console.log('🔧 Response status:', response.status, response.statusText)
+    console.log('🔧 Response headers:', Object.fromEntries(response.headers.entries()))
 
     // Handle 401 - token expired, try to refresh once
     if (response.status === 401) {
@@ -99,6 +106,8 @@ export class GeminiAPIClient {
         const tokenResponse = await performSSOLogin(config.ssoUrl, credentials)
         token = tokenResponse.access_token
         
+        console.log('🔧 Token refreshed, retrying request')
+        
         // Retry request with new token
         const retryResponse = await fetch(url, {
           method: 'POST',
@@ -108,6 +117,8 @@ export class GeminiAPIClient {
           },
           body: JSON.stringify(requestBody)
         })
+        
+        console.log('🔧 Retry response status:', retryResponse.status, retryResponse.statusText)
         
         if (!retryResponse.ok) {
           throw new Error(`Gemini API request failed after token refresh: ${retryResponse.status} ${retryResponse.statusText}`)
@@ -121,14 +132,23 @@ export class GeminiAPIClient {
     }
 
     if (!response.ok) {
-      throw new Error(`Gemini API request failed: ${response.status} ${response.statusText}`)
+      // Get response body for better error details
+      let errorBody = ''
+      try {
+        errorBody = await response.text()
+        console.log('🔧 Error response body:', errorBody)
+      } catch (e) {
+        console.log('🔧 Could not read error body')
+      }
+      
+      throw new Error(`Gemini API request failed: ${response.status} ${response.statusText}. Body: ${errorBody}`)
     }
 
     return response
   }
 
   /**
-   * Generate content using Gemini API
+   * Generate content using Gemini API with automatic URL format detection
    */
   async generateContent(prompt: string, options?: {
     temperature?: number
@@ -143,7 +163,21 @@ export class GeminiAPIClient {
       throw new Error('Gemini API not configured. Please set up the configuration.')
     }
 
-    const url = `${config.geminiApiUrl}/v1/projects/${config.projectId}/locations/${config.location}/publishers/google/models/${config.model}:generateContent`
+    // Define multiple URL formats to try
+    const urlFormats = [
+      // Format 1: Full Vertex AI path (current)
+      `${config.geminiApiUrl}/v1/projects/${config.projectId}/locations/${config.location}/publishers/google/models/${config.model}:generateContent`,
+      // Format 2: Simplified path
+      `${config.geminiApiUrl}/v1/models/${config.model}:generateContent`,
+      // Format 3: Projects without publishers
+      `${config.geminiApiUrl}/v1/projects/${config.projectId}/models/${config.model}:generateContent`,
+      // Format 4: Enterprise AI path
+      `${config.geminiApiUrl}/ai/v1/models/${config.model}:generateContent`,
+      // Format 5: Google AI Studio style
+      `${config.geminiApiUrl}/v1beta/models/${config.model}:generateContent`,
+      // Format 6: Enterprise specific
+      `${config.geminiApiUrl}/gemini/v1/models/${config.model}:generateContent`,
+    ]
     
     const requestBody: GeminiRequest = {
       contents: [
@@ -170,14 +204,36 @@ export class GeminiAPIClient {
       }
     }
 
-    const response = await this.makeAuthenticatedRequest(url, requestBody)
-    const data: GeminiResponse = await response.json()
-    
-    if (!data.candidates || data.candidates.length === 0) {
-      throw new Error('No response generated from Gemini API')
+    // Try each URL format until one works
+    for (let i = 0; i < urlFormats.length; i++) {
+      const url = urlFormats[i]
+      console.log(`🔧 Trying Gemini API URL Format ${i + 1}: ${url}`)
+      
+      try {
+        const response = await this.makeAuthenticatedRequest(url, requestBody)
+        const data: GeminiResponse = await response.json()
+        
+        if (!data.candidates || data.candidates.length === 0) {
+          throw new Error('No response generated from Gemini API')
+        }
+
+        console.log(`✅ SUCCESS! Working URL format: ${url}`)
+        return data.candidates[0].content.parts[0].text
+        
+      } catch (error) {
+        console.log(`❌ URL Format ${i + 1} failed: ${error.message}`)
+        
+        // If this is the last format and still failing, throw the error
+        if (i === urlFormats.length - 1) {
+          throw error
+        }
+        
+        // Continue to next format
+        continue
+      }
     }
 
-    return data.candidates[0].content.parts[0].text
+    throw new Error('All Gemini API URL formats failed. Please check your configuration.')
   }
 
   /**

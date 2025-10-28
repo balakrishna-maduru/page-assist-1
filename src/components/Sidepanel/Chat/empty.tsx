@@ -13,12 +13,23 @@ import {
   setOllamaURL as saveOllamaURL,
   fetchChatModels
 } from "~/services/ollama"
+import { isSSOConfigured } from "@/services/sso-auth"
 
 export const EmptySidePanel = () => {
   const [ollamaURL, setOllamaURL] = useState<string>("")
   const { t } = useTranslation(["playground", "common"])
   const queryClient = useQueryClient()
   const [checkOllamaStatus] = useStorage("checkOllamaStatus", true)
+  const [ssoConfigured, setSSOConfigured] = useState<boolean>(false)
+
+  // Check SSO configuration
+  useEffect(() => {
+    const checkSSO = async () => {
+      const configured = await isSSOConfigured()
+      setSSOConfigured(configured)
+    }
+    checkSSO()
+  }, [])
 
   const {
     data: ollamaInfo,
@@ -26,7 +37,7 @@ export const EmptySidePanel = () => {
     refetch,
     isRefetching
   } = useQuery({
-    queryKey: ["ollamaStatus", checkOllamaStatus],
+    queryKey: ["ollamaStatus", checkOllamaStatus, ssoConfigured],
     queryFn: async () => {
       const ollamaURL = await getOllamaURL()
       const isOk = await isOllamaRunning()
@@ -35,7 +46,7 @@ export const EmptySidePanel = () => {
         queryKey: ["getAllModelsForSelect"]
       })
       return {
-        isOk: checkOllamaStatus ? isOk : true,
+        isOk: ssoConfigured || (checkOllamaStatus ? isOk : true), // Allow if SSO is configured
         models,
         ollamaURL
       }
@@ -170,7 +181,14 @@ export const EmptySidePanel = () => {
             <div className="inline-flex  items-center space-x-2">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
               <p className="dark:text-gray-400 text-gray-900">
-                {t("ollamaState.running")}
+                {ssoConfigured ? "🔐 SSO + Gemini API Ready" : t("ollamaState.running")}
+              </p>
+            </div>
+          ) : ssoConfigured ? (
+            <div className="inline-flex  items-center space-x-2">
+              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+              <p className="dark:text-gray-400 text-gray-900">
+                🔐 SSO + Gemini API Configured (Ollama not required)
               </p>
             </div>
           ) : (

@@ -104,32 +104,79 @@ export const clearTokens = async (): Promise<void> => {
  * Perform SSO login
  */
 export const performSSOLogin = async (ssoUrl: string, credentials: SSOCredentials): Promise<SSOTokenResponse> => {
+  console.log('🔧 SSO Login attempt:', {
+    url: ssoUrl,
+    userid: credentials.userid,
+    otp_type: credentials.otp_type
+  })
+
   try {
+    // Check if the URL is accessible first
+    console.log('🔧 Testing SSO endpoint accessibility...')
+    
+    const requestBody = {
+      userid: credentials.userid,
+      password: credentials.password,
+      otp: credentials.otp || "NONE",
+      otp_type: credentials.otp_type || "PUSH"
+    }
+    
+    console.log('🔧 Request body:', {
+      userid: requestBody.userid,
+      otp: requestBody.otp,
+      otp_type: requestBody.otp_type,
+      password: '[HIDDEN]'
+    })
+
     const response = await fetch(ssoUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        userid: credentials.userid,
-        password: credentials.password,
-        otp: credentials.otp || "NONE",
-        otp_type: credentials.otp_type || "PUSH"
-      })
+      body: JSON.stringify(requestBody),
+      // Add these options to handle potential CORS and network issues
+      mode: 'cors',
+      credentials: 'omit',
+      redirect: 'follow'
     })
 
+    console.log('🔧 Response status:', response.status, response.statusText)
+    console.log('🔧 Response headers:', Object.fromEntries(response.headers.entries()))
+
     if (!response.ok) {
-      throw new Error(`SSO login failed: ${response.status} ${response.statusText}`)
+      // Get response body for better error details
+      let errorDetails = ''
+      try {
+        errorDetails = await response.text()
+        console.log('🔧 Error response body:', errorDetails)
+      } catch (e) {
+        console.log('🔧 Could not read error response body')
+      }
+      
+      throw new Error(`SSO login failed: ${response.status} ${response.statusText}. Details: ${errorDetails}`)
     }
 
     const tokenResponse: SSOTokenResponse = await response.json()
+    console.log('✅ SSO login successful, token received')
     
     // Store the token
     await setAccessToken(tokenResponse)
     
     return tokenResponse
   } catch (error) {
-    console.error('SSO login error:', error)
+    console.error('❌ SSO login error:', error)
+    
+    // Provide more specific error messages
+    if (error.message === 'Failed to fetch') {
+      throw new Error(`Network error: Cannot reach SSO endpoint at ${ssoUrl}. This might be due to:
+        1. CORS policy blocking the request
+        2. Network connectivity issues
+        3. SSL certificate problems
+        4. Firewall or VPN restrictions
+        
+        Please check your network connection and ensure the endpoint is accessible.`)
+    }
+    
     throw error
   }
 }

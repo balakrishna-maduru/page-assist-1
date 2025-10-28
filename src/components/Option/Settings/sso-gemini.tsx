@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
-import { Form, Input, Button, message, Card, Typography, Space, Divider } from "antd"
+import { Form, Input, Button, message, Card, Typography, Space, Divider, Alert } from "antd"
 import { 
   getSSOCredentials, 
   setSSOCredentials, 
@@ -12,7 +12,11 @@ import {
   type SSOCredentials,
   type GeminiAPIConfig
 } from "@/services/sso-auth"
-import { SSOGeminiTestComponent } from "./sso-gemini-test"
+import { getOptimalConfig, QUICK_DEV_CONFIG } from "@/services/dev-config"
+import { createModel } from "@/db/dexie/models"
+import { OpenAIModelDb } from "@/db/dexie/openai"
+import { DEFAULT_SSO_CONFIG } from "@/config/default-sso-config"
+import { initializeDefaultSSO } from "@/services/default-sso-init"
 
 const { Title, Text } = Typography
 
@@ -26,9 +30,22 @@ export const SSOGeminiSettings = () => {
   const [tokenStatus, setTokenStatus] = useState<string>("")
 
   useEffect(() => {
-    loadSettings()
-    checkTokenStatus()
+    // Auto-initialize with default configuration
+    initializeDefaults()
   }, [])
+
+  const initializeDefaults = async () => {
+    try {
+      // Initialize default SSO configuration
+      await initializeDefaultSSO()
+      
+      // Load settings (which should now be the defaults)
+      await loadSettings()
+      await checkTokenStatus()
+    } catch (error) {
+      console.error("Failed to initialize defaults:", error)
+    }
+  }
 
   const loadSettings = async () => {
     try {
@@ -42,6 +59,13 @@ export const SSOGeminiSettings = () => {
           password: credentials.password,
           otp_type: credentials.otp_type || "PUSH"
         })
+      } else {
+        // Set default values if no credentials exist
+        ssoForm.setFieldsValue({
+          userid: DEFAULT_SSO_CONFIG.credentials.userid,
+          password: DEFAULT_SSO_CONFIG.credentials.password,
+          otp_type: DEFAULT_SSO_CONFIG.credentials.otp_type
+        })
       }
 
       if (config) {
@@ -49,8 +73,17 @@ export const SSOGeminiSettings = () => {
           ssoUrl: config.ssoUrl,
           geminiApiUrl: config.geminiApiUrl,
           projectId: config.projectId,
-          location: config.location || "asia-southeast1",
-          model: config.model || "gemini-2.5-flash"
+          location: config.location,
+          model: config.model
+        })
+      } else {
+        // Set default values if no config exists
+        geminiForm.setFieldsValue({
+          ssoUrl: DEFAULT_SSO_CONFIG.geminiConfig.ssoUrl,
+          geminiApiUrl: DEFAULT_SSO_CONFIG.geminiConfig.geminiApiUrl,
+          projectId: DEFAULT_SSO_CONFIG.geminiConfig.projectId,
+          location: DEFAULT_SSO_CONFIG.geminiConfig.location,
+          model: DEFAULT_SSO_CONFIG.geminiConfig.model
         })
       }
 
@@ -110,6 +143,13 @@ export const SSOGeminiSettings = () => {
       await setGeminiConfig(config)
       message.success("Gemini API configuration saved successfully")
       
+      // Create SSO Gemini provider and model
+      try {
+        await createSSOGeminiProviderAndModel()
+      } catch (error) {
+        console.warn("Failed to create provider/model (may already exist):", error.message)
+      }
+      
       // Check if fully configured now
       const isConfigured = await isSSOConfigured()
       setConfigured(isConfigured)
@@ -145,6 +185,107 @@ export const SSOGeminiSettings = () => {
     }
   }
 
+  const createSSOGeminiProviderAndModel = async () => {
+    try {
+      const config = await getGeminiConfig()
+      if (!config) {
+        throw new Error("Gemini API configuration not found")
+      }
+
+      // Create provider
+      const openaiDb = new OpenAIModelDb()
+      const providerId = `sso-gemini-${Date.now()}`
+      
+      const provider = {
+        id: providerId,
+        provider: "sso-gemini",
+        name: "SSO Gemini API",
+        baseUrl: config.geminiApiUrl,
+        apiKey: "sso-token", // Will be replaced with actual token
+        db_type: "sso_gemini_provider",
+        createdAt: Date.now(),
+        config: {
+          model: config.model,
+          projectId: config.projectId,
+          location: config.location,
+          ssoUrl: config.ssoUrl
+        }
+      }
+
+      await openaiDb.create(provider)
+      console.log("✅ Created SSO Gemini provider:", providerId)
+
+      // Create model
+      const model = await createModel(
+        config.model,
+        `${config.model} (SSO)`,
+        providerId,
+        "chat"
+      )
+      
+      console.log("✅ Created SSO Gemini model:", model.id)
+      message.success("SSO Gemini provider and model created successfully!")
+      
+      return { provider, model }
+    } catch (error) {
+      console.error("Failed to create SSO Gemini provider/model:", error)
+      message.error(`Failed to create provider/model: ${error.message}`)
+      throw error
+    }
+  }
+
+  const useMockServer = async () => {
+    try {
+      setLoading(true)
+      
+      // Set mock server SSO credentials
+      const mockCredentials: SSOCredentials = {
+        userid: QUICK_DEV_CONFIG.mockCredentials!.username,
+        password: QUICK_DEV_CONFIG.mockCredentials!.password,
+        otp_type: "PUSH"
+      }
+      
+      // Set mock server configuration
+      const mockConfig: GeminiAPIConfig = {
+        ssoUrl: QUICK_DEV_CONFIG.ssoEndpoint,
+        geminiApiUrl: QUICK_DEV_CONFIG.geminiEndpoint,
+        projectId: "mock-project",
+        location: "us-central1",
+        model: "gemini-2.5-flash"
+      }
+      
+      await setSSOCredentials(mockCredentials)
+      await setGeminiConfig(mockConfig)
+      
+      // Update forms
+      ssoForm.setFieldsValue({
+        userid: mockCredentials.userid,
+        password: mockCredentials.password,
+        otp_type: mockCredentials.otp_type
+      })
+      
+      geminiForm.setFieldsValue({
+        ssoUrl: mockConfig.ssoUrl,
+        geminiApiUrl: mockConfig.geminiApiUrl,
+        projectId: mockConfig.projectId,
+        location: mockConfig.location,
+        model: mockConfig.model
+      })
+      
+      message.success("🧪 Mock server configuration applied! Ready for testing.")
+      
+      // Create SSO Gemini provider and model
+      await createSSOGeminiProviderAndModel()
+      
+      await loadSettings()
+    } catch (error) {
+      console.error("Failed to apply mock configuration:", error)
+      message.error("Failed to apply mock configuration")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -164,6 +305,14 @@ export const SSOGeminiSettings = () => {
         </div>
       </div>
 
+      <Alert
+        message="🔧 Auto-Configured SSO + Gemini"
+        description="All values are automatically configured with hardcoded defaults. Mock server running on localhost:3003. The system will auto-select the Gemini model for you."
+        type="success"
+        showIcon
+        style={{ marginBottom: 16 }}
+      />
+
       <Card title="SSO Credentials" size="small">
         <Form
           form={ssoForm}
@@ -173,32 +322,37 @@ export const SSOGeminiSettings = () => {
         >
           <Form.Item
             name="userid"
-            label="User ID"
+            label="User ID (Auto-configured)"
             rules={[{ required: true, message: "Please enter your user ID" }]}
           >
-            <Input placeholder="Enter your SSO user ID" />
+            <Input placeholder="Enter your SSO user ID" readOnly disabled />
           </Form.Item>
 
           <Form.Item
             name="password"
-            label="Password"
+            label="Password (Auto-configured)"
             rules={[{ required: true, message: "Please enter your password" }]}
           >
-            <Input.Password placeholder="Enter your SSO password" />
+            <Input.Password placeholder="Enter your SSO password" readOnly disabled />
           </Form.Item>
 
           <Form.Item
             name="otp_type"
-            label="OTP Type"
+            label="OTP Type (Auto-configured)"
             initialValue="PUSH"
           >
-            <Input placeholder="OTP type (default: PUSH)" />
+            <Input placeholder="OTP type (default: PUSH)" readOnly disabled />
           </Form.Item>
 
           <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading}>
-              Save SSO Credentials
-            </Button>
+            <Space>
+              <Button type="primary" onClick={handleTestConnection} loading={testLoading}>
+                🧪 Test Connection
+              </Button>
+              <Text type="secondary" style={{ fontSize: '12px' }}>
+                All values auto-configured with defaults
+              </Text>
+            </Space>
           </Form.Item>
         </Form>
       </Card>
@@ -212,51 +366,51 @@ export const SSOGeminiSettings = () => {
         >
           <Form.Item
             name="ssoUrl"
-            label="SSO Login URL"
+            label="SSO Login URL (Auto-configured)"
             rules={[{ required: true, message: "Please enter the SSO URL" }]}
-            extra="Example: https://edsf-sso.edsf-pas.ocp.uat.abc.com/service-login"
+            extra="Auto-configured for mock server"
           >
-            <Input placeholder="Enter SSO login endpoint URL" />
+            <Input placeholder="Enter SSO login endpoint URL" readOnly disabled />
           </Form.Item>
 
           <Form.Item
             name="geminiApiUrl"
-            label="Gemini API Base URL"
+            label="Gemini API Base URL (Auto-configured)"
             rules={[{ required: true, message: "Please enter the Gemini API URL" }]}
-            extra="Example: https://stork.apps.ocp8.uat.abc.com"
+            extra="Auto-configured for mock server"
           >
-            <Input placeholder="Enter Gemini API base URL" />
+            <Input placeholder="Enter Gemini API base URL" readOnly disabled />
           </Form.Item>
 
           <Form.Item
             name="projectId"
-            label="Project ID"
+            label="Project ID (Auto-configured)"
             rules={[{ required: true, message: "Please enter the project ID" }]}
-            extra="Example: dbs-mod-adag-d4q9v"
+            extra="Auto-configured project ID"
           >
-            <Input placeholder="Enter your project ID" />
+            <Input placeholder="Enter your project ID" readOnly disabled />
           </Form.Item>
 
           <Form.Item
             name="location"
-            label="Location"
-            initialValue="asia-southeast1"
+            label="Location (Auto-configured)"
+            initialValue="us-central1"
           >
-            <Input placeholder="API location (default: asia-southeast1)" />
+            <Input placeholder="API location" readOnly disabled />
           </Form.Item>
 
           <Form.Item
             name="model"
-            label="Model Name"
+            label="Model Name (Auto-configured)"
             initialValue="gemini-2.5-flash"
           >
-            <Input placeholder="Model name (default: gemini-2.5-flash)" />
+            <Input placeholder="Model name" readOnly disabled />
           </Form.Item>
 
           <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading}>
-              Save Gemini Configuration
-            </Button>
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              ✅ All Gemini API values are auto-configured with hardcoded defaults
+            </Text>
           </Form.Item>
         </Form>
       </Card>
@@ -297,8 +451,6 @@ export const SSOGeminiSettings = () => {
           </ul>
         </div>
       </Card>
-
-      <SSOGeminiTestComponent />
     </div>
   )
 }

@@ -11,7 +11,7 @@ import { useStorage } from "@plasmohq/storage/hook"
 import { useStoreChatModelSettings } from "@/store/model"
 import { ChatDocuments } from "@/models/ChatTypes"
 import { searchChatMode } from "./chat-modes/searchChatMode"
-import { normalChatMode } from "./chat-modes/normalChatMode"
+import { normalChatModeWithPageContext } from "./chat-modes/normalChatModeWithPageContext"
 import { continueChatMode } from "./chat-modes/continueChatMode"
 import { ragMode } from "./chat-modes/ragMode"
 import {
@@ -321,7 +321,7 @@ export const useMessageOption = () => {
             uploadedFiles: uploadedFiles
           }
 
-          await normalChatMode(
+          await normalChatModeWithPageContext(
             message,
             image,
             isRegenerate,

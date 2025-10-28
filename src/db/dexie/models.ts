@@ -553,6 +553,16 @@ export const ollamaFormatAllCustomModels = async (
       getAllCustomModels(),
       getAllOpenAIConfig()
     ])
+    
+    console.log("🔍 ollamaFormatAllCustomModels - All Models:", allModles.length)
+    console.log("🔍 ollamaFormatAllCustomModels - All Providers:", allProviders.length)
+    
+    // Log SSO Gemini models and providers
+    const ssoModels = allModles.filter(m => m.provider?.provider === "sso-gemini")
+    const ssoProviders = allProviders.filter(p => p.provider === "sso-gemini")
+    console.log("🔍 SSO Models found:", ssoModels.length, ssoModels)
+    console.log("🔍 SSO Providers found:", ssoProviders.length, ssoProviders)
+    
     const modelNicknames = await getAllModelNicknames()
     const lmstudioProviders = allProviders.filter(
       (provider) => provider.provider === "lmstudio"
@@ -647,13 +657,12 @@ export const ollamaFormatAllCustomModels = async (
     ]
 
     const ollamaModels = allModlesWithLMStudio.map((model) => {
+      const providerInfo = allProviders.find((provider) => provider.id === model.provider_id)
       return {
         name: model.name,
         model: model.id,
         modified_at: "",
-        provider:
-          allProviders.find((provider) => provider.id === model.provider_id)
-            ?.provider || "custom",
+        provider: providerInfo?.provider || "custom",
         size: 0,
         digest: "",
         details: {
@@ -667,13 +676,18 @@ export const ollamaFormatAllCustomModels = async (
       }
     })
 
-    return ollamaModels.map((model) => {
+    const finalModels = ollamaModels.map((model) => {
       return {
         ...model,
         nickname: modelNicknames[model.model]?.model_name || model.name,
         avatar: modelNicknames[model.model]?.model_avatar || undefined
       }
     })
+    
+    const ssoFinalModels = finalModels.filter(m => m.provider === "sso-gemini")
+    console.log("🔍 Final SSO Models for chat:", ssoFinalModels.length, ssoFinalModels)
+    
+    return finalModels
   } catch (e) {
     console.error(e)
     return []

@@ -48,6 +48,10 @@ import {
 } from "./utils/messageHelpers"
 import { updatePageTitle } from "@/utils/update-page-title"
 import { getNoOfRetrievedDocs } from "@/services/app"
+import { ChatDocument, ChatDocuments } from "@/models/ChatTypes"
+import { getTabContents } from "@/libs/get-tab-contents"
+import { getModelInfo, isCustomModel } from "@/db/dexie/models"
+import { getOpenAIConfigById } from "@/db/dexie/openai"
 
 export const useMessage = () => {
   const {
@@ -771,10 +775,117 @@ export const useMessage = () => {
       image = `data:image/jpeg;base64,${image.split(",")[1]}`
     }
 
-    const ollama = await pageAssistModel({
-      model: selectedModel!,
-      baseUrl: cleanUrl(url)
-    })
+    // Debug: Log the selected model
+    console.log("🔍 DEBUG: Selected model:", selectedModel)
+    console.log("🔍 DEBUG: Is custom model:", isCustomModel(selectedModel))
+
+    // FORCE USE SSO GEMINI: Check if SSO Gemini model exists and use it regardless of selectedModel
+    let ollama: any
+    let isSSO_Gemini = false
+    
+    try {
+      // Try to find SSO Gemini model directly
+      const { OpenAIModelDb } = await import("@/db/dexie/openai")
+      const openaiDb = new OpenAIModelDb()
+      const ssoProvider = await openaiDb.getById("sso-gemini-default")
+      
+      if (ssoProvider && ssoProvider.provider === "sso-gemini") {
+        console.log("🎯 FOUND SSO Gemini provider, forcing CustomGeminiChat usage")
+        isSSO_Gemini = true
+        
+        // Import and use CustomGeminiChat
+        const { CustomGeminiChat } = await import("@/models/CustomGeminiChat")
+        ollama = new CustomGeminiChat({
+          modelName: "gemini-2.5-flash",
+          temperature: 0.2,
+          topP: 0.8,
+          topK: 40,
+          streaming: true
+        })
+      } else {
+        console.log("🔍 DEBUG: No SSO Gemini provider found, checking selected model...")
+        
+        // Fallback to the original logic
+        if (isCustomModel(selectedModel)) {
+          const modelInfo = await getModelInfo(selectedModel)
+          console.log("🔍 DEBUG: Model info:", modelInfo)
+          
+          const providerInfo = await getOpenAIConfigById(modelInfo.provider_id)
+          console.log("🔍 DEBUG: Provider info:", providerInfo)
+          
+          if (providerInfo?.provider === "sso-gemini") {
+            console.log("🎯 Detected SSO Gemini model, using CustomGeminiChat")
+            isSSO_Gemini = true
+            
+            // Import and use CustomGeminiChat
+            const { CustomGeminiChat } = await import("@/models/CustomGeminiChat")
+            ollama = new CustomGeminiChat({
+              modelName: modelInfo.model_id,
+              temperature: 0.2,
+              topP: 0.8,
+              topK: 40,
+              streaming: true
+            })
+          } else {
+            console.log("🔍 DEBUG: Not SSO Gemini, using pageAssistModel with provider:", providerInfo?.provider)
+            ollama = await pageAssistModel({
+              model: selectedModel!,
+              baseUrl: cleanUrl(url)
+            })
+          }
+        } else {
+          console.log("🔍 DEBUG: Not a custom model, using pageAssistModel")
+          ollama = await pageAssistModel({
+            model: selectedModel!,
+            baseUrl: cleanUrl(url)
+          })
+        }
+      }
+    } catch (error) {
+      console.error("🔍 DEBUG: Error checking SSO provider:", error)
+      // Fallback to regular model
+      ollama = await pageAssistModel({
+        model: selectedModel!,
+        baseUrl: cleanUrl(url)
+      })
+    }
+
+    // Get current page content
+    let currentTabDocuments: ChatDocuments = []
+    let pageContext = ""
+    
+    try {
+      const tabs = await browser.tabs.query({ active: true, currentWindow: true })
+      if (tabs.length > 0) {
+        const activeTab = tabs[0]
+        if (activeTab.id && activeTab.title && activeTab.url) {
+          // Filter out browser internal pages
+          const url = activeTab.url.toLowerCase()
+          if (!url.startsWith('chrome://') &&
+              !url.startsWith('edge://') &&
+              !url.startsWith('brave://') &&
+              !url.startsWith('firefox://') &&
+              !url.startsWith('chrome-extension://') &&
+              !url.startsWith('moz-extension://')) {
+            
+            const document: ChatDocument = {
+              title: activeTab.title,
+              url: activeTab.url,
+              type: "tab",
+              tabId: activeTab.id,
+              favIconUrl: activeTab.favIconUrl
+            }
+            
+            currentTabDocuments = [document]
+            pageContext = await getTabContents(currentTabDocuments)
+            console.log("Page context extracted for normal chat:", pageContext ? "Yes" : "No")
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Failed to extract page context:", error)
+      pageContext = ""
+    }
 
     let newMessage: Message[] = []
     let generateMessageId = generateID()
@@ -819,51 +930,107 @@ export const useMessage = () => {
     let contentToSave = ""
 
     try {
-      const prompt = await systemPromptForNonRag()
-      const selectedPrompt = await getPromptById(selectedSystemPrompt)
+      let humanMessage: any
 
-      let humanMessage = await humanMessageFormatter({
-        content: [
-          {
-            text: message,
-            type: "text"
-          }
-        ],
-        model: selectedModel,
-        useOCR
-      })
-      if (image.length > 0) {
+      // If we have page context, use RAG-style prompting
+      if (pageContext && pageContext.trim().length > 0) {
+        const { ragPrompt: systemPrompt } = await promptForRag()
+        
+        // Create human message with context included in the system prompt
         humanMessage = await humanMessageFormatter({
           content: [
             {
-              text: message,
+              text: systemPrompt
+                .replace("{context}", pageContext)
+                .replace("{question}", message),
               type: "text"
-            },
-            {
-              image_url: image,
-              type: "image_url"
             }
           ],
           model: selectedModel,
           useOCR
         })
+        
+        console.log("Using RAG-style prompting with page context")
+      } else {
+        // Fall back to normal prompting without context
+        const prompt = await systemPromptForNonRag()
+        const selectedPrompt = await getPromptById(selectedSystemPrompt)
+
+        humanMessage = await humanMessageFormatter({
+          content: [
+            {
+              text: message,
+              type: "text"
+            }
+          ],
+          model: selectedModel,
+          useOCR
+        })
+        
+        console.log("Using normal prompting without page context")
+      }
+
+      // Handle image if present
+      if (image.length > 0) {
+        if (pageContext && pageContext.trim().length > 0) {
+          // With page context, include both context and image
+          const { ragPrompt: systemPrompt } = await promptForRag()
+          humanMessage = await humanMessageFormatter({
+            content: [
+              {
+                text: systemPrompt
+                  .replace("{context}", pageContext)
+                  .replace("{question}", message),
+                type: "text"
+              },
+              {
+                image_url: image,
+                type: "image_url"
+              }
+            ],
+            model: selectedModel,
+            useOCR
+          })
+        } else {
+          // Without page context, just include image
+          humanMessage = await humanMessageFormatter({
+            content: [
+              {
+                text: message,
+                type: "text"
+              },
+              {
+                image_url: image,
+                type: "image_url"
+              }
+            ],
+            model: selectedModel,
+            useOCR
+          })
+        }
       }
 
       const applicationChatHistory = generateHistory(history, selectedModel)
 
-      if (prompt && !selectedPrompt) {
-        applicationChatHistory.unshift(
-          await systemPromptFormatter({
-            content: prompt
-          })
-        )
-      }
-      if (selectedPrompt) {
-        applicationChatHistory.unshift(
-          await systemPromptFormatter({
-            content: selectedPrompt.content
-          })
-        )
+      // Only add system prompts if we're not using page context (which includes its own prompt)
+      if (!pageContext || pageContext.trim().length === 0) {
+        const prompt = await systemPromptForNonRag()
+        const selectedPrompt = await getPromptById(selectedSystemPrompt)
+
+        if (prompt && !selectedPrompt) {
+          applicationChatHistory.unshift(
+            await systemPromptFormatter({
+              content: prompt
+            })
+          )
+        }
+        if (selectedPrompt) {
+          applicationChatHistory.unshift(
+            await systemPromptFormatter({
+              content: selectedPrompt.content
+            })
+          )
+        }
       }
 
       let generationInfo: any | undefined = undefined
