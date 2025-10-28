@@ -9,7 +9,7 @@ This integration provides SSO authentication with automatic token refresh and se
 1. Open Page Assist extension
 2. Go to **Settings** → **SSO Gemini**
 3. Fill in your SSO credentials:
-   - **User ID**: Your enterprise username (e.g., `balakrishnam1`)
+   - **User ID**: Your enterprise username (e.g., `your_username`)
    - **Password**: Your enterprise password
    - **OTP Type**: `PUSH` (default)
 
@@ -71,12 +71,14 @@ Click **"Test SSO Login & API Connection"** to verify everything works.
 
 ### Basic Chat
 ```typescript
+```typescript
 // The CustomGeminiChat model handles all authentication automatically
 const model = new CustomGeminiChat({
-  modelName: "gemini-2.5-flash",
+  modelName: "gemini-1.5-pro",
   temperature: 0.2,
   streaming: true
 });
+```
 
 const response = await model.invoke([
   new HumanMessage("Explain quantum computing")
@@ -210,7 +212,7 @@ interface GeminiAPIConfig {
   geminiApiUrl: string;  // Gemini API base URL
   projectId: string;     // GCP project ID
   location: string;      // API location (default: "asia-southeast1")
-  model: string;         // Model name (default: "gemini-2.5-flash")
+  model: string;         // Model name (default: "gemini-1.5-pro")
 }
 ```
 

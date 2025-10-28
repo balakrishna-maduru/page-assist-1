@@ -137,7 +137,7 @@ export const SSOGeminiSettings = () => {
         geminiApiUrl: values.geminiApiUrl,
         projectId: values.projectId,
         location: values.location || "asia-southeast1",
-        model: values.model || "gemini-2.5-flash"
+        model: values.model || "gemini-1.5-pro"
       }
 
       await setGeminiConfig(config)
@@ -251,7 +251,7 @@ export const SSOGeminiSettings = () => {
         geminiApiUrl: QUICK_DEV_CONFIG.geminiEndpoint,
         projectId: "mock-project",
         location: "us-central1",
-        model: "gemini-2.5-flash"
+        model: "gemini-1.5-pro"
       }
       
       await setSSOCredentials(mockCredentials)
@@ -402,7 +402,7 @@ export const SSOGeminiSettings = () => {
           <Form.Item
             name="model"
             label="Model Name (Auto-configured)"
-            initialValue="gemini-2.5-flash"
+            initialValue="gemini-1.5-pro"
           >
             <Input placeholder="Model name" readOnly disabled />
           </Form.Item>

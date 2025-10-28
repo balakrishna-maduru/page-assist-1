@@ -67,10 +67,23 @@ src/services/dev-config.ts
 
 # Development Scripts and Temporary Files
 test-*.js
+test-*.ts
 debug-*.js
+debug-*.ts
 temp-*.js
+temp-*.ts
+*test*.tsx
+*test*.ts
 *.tmp
 *.temp
+
+# Test Utilities and Development Files
+src/utils/test-*
+src/components/**/*-test.*
+src/services/dev-*
+development.*
+mock-*
+*mock*
 
 # IDE and Editor Files
 .vscode/

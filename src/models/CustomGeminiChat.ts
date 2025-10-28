@@ -39,7 +39,7 @@ export class CustomGeminiChat extends BaseChatModel<any> {
     return "CustomGeminiChat"
   }
 
-  modelName = "gemini-2.5-flash"
+  modelName = "gemini-1.5-pro"
   temperature = 0.2
   topP = 0.8
   topK = 40

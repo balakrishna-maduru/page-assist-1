@@ -127,7 +127,7 @@ export const normalChatModeWithPageContext = async (
       // Import and use CustomGeminiChat
       const { CustomGeminiChat } = await import("@/models/CustomGeminiChat")
       ollama = new CustomGeminiChat({
-        modelName: "gemini-2.5-flash",
+        modelName: "gemini-1.5-pro",
         temperature: 0.2,
         topP: 0.8,
         topK: 40,
